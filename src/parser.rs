@@ -20,11 +20,6 @@ pub struct TrailCoordinates {
     y: f32,
     z: f32
 }
-// 
-// pub fn length_value(input: &[u8]) -> IResult<&[u8],&[u8]> {
-    // let (input, length) = be_u16(input)?;
-    // take(length)(input)
-// }
 
 fn parse_coordinates(input: &[u8]) -> IResult<&[u8], TrailCoordinates> {
     let (input, (x, y, z)) = tuple((le_f32, le_f32, le_f32))(input)?;
@@ -49,34 +44,3 @@ pub fn parse_trail(input: &[u8]) -> IResult<&[u8], Trail> {
         coordinates: vec
     }))
 }
-
-
-
-// fn folder_function(mut acc: Vec<TrailCoordinates>, item: TrailCoordinates) -> mut Vec<TrailCoordinates> {
-//     acc.push(item);
-//     acc
-// }
-
-// pub fn test_parse(input: &[u8]) -> Result {
-//     // do_parse!(input, 
-//         // trailVersion: le_i32 >>
-//         // mapID: le_i32 >>
-//         // x: le_f32 >>
-//         // y: le_f32 >>
-//         // z: le_f32
-//     // )
-//     let (buffer, trailVersion) = le_i32(input).unwrap();
-//     // let (buffer2, mapID) = le_i32(buffer).unwrap();
-//     let x = 0.1;
-//     let y = 0.2;
-//     let z  = 0.3;
-
-//     return  Result{
-//             trailVersion,
-//             mapID,
-//             x,
-//             y,
-//             z
-//         };
-    
-// }
