@@ -4,7 +4,7 @@ use nom::{
     IResult,
     sequence::tuple};
 use nom::multi::fold_many0;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_xml_rs;
 use std::collections::HashMap;
 
@@ -118,7 +118,7 @@ pub fn parse_xml(xml: &str ) -> OverlayData {
     data
 }
 
-pub fn process_taco_data(input: OverlayData) -> HashMap<u32, Vec<[f32; 3]>> {
+pub fn process_taco_data(input: OverlayData) -> HashMap<u32, Converted> {
     let root_marker_category = input.marker_category;
 
     let marker_category_array_container = root_marker_category.marker_category.unwrap();
@@ -127,22 +127,21 @@ pub fn process_taco_data(input: OverlayData) -> HashMap<u32, Vec<[f32; 3]>> {
 
     let poi_array = input.pois.poi_array;
 
-    let folder_function = | mut acc: HashMap<u32, Vec<[f32; 3]>>, item: &PoiItems | {
+    let folder_function = | mut acc: HashMap<u32, Converted>, item: &PoiItems | {
         match item {
             PoiItems::POI(poi)=> { 
                 let map_id = poi.map_id;
                 let array_ = acc.get(&map_id);
                 match array_ {
-                    Some(vec_) => {
-                        let mut res = vec_.clone();
-                        // res.push(xpos);
+                    Some(x_) => {
+                        let mut res = x_.paths[0].points.clone();
                         res.push([poi.xpos, poi.ypos, poi.zpos]);
-                        acc.insert(map_id, res);
+                        acc.insert(map_id, Converted{paths: [Path{points: res}]});
                     }
                     _ => {
                         let mut vec_ = Vec::new();
                         vec_.push([poi.xpos, poi.ypos, poi.zpos]);
-                        acc.insert(map_id, vec_);
+                        acc.insert(map_id, Converted{paths: [Path{points: vec_}]});
                     }
                 }
             }
@@ -158,13 +157,15 @@ pub fn process_taco_data(input: OverlayData) -> HashMap<u32, Vec<[f32; 3]>> {
     return result
 }
 
-struct Converted {
+#[derive(Debug, Serialize)]
+pub struct Converted {
     // icons: Vec<String>,
-    paths: Vec<Path>
+    paths: [Path; 1]
 }
 
+#[derive(Debug, Serialize)]
 struct Path {
-    texture: String,
+    // texture: String,
     points: Vec<[f32; 3]>
 }
 
