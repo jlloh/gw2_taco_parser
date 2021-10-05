@@ -8,6 +8,11 @@ use serde::{Deserialize, Serialize};
 use serde_xml_rs;
 use std::collections::HashMap;
 
+use std::io;
+use std::io::Read;
+use std::io::BufReader;
+use std::fs::File;
+
 #[derive(Debug,PartialEq)]
 pub struct Trail {
     trail_version: i32,
@@ -88,7 +93,9 @@ struct POI {
     #[serde(rename = "iconFile")]
     icon_file: Option<String>,
     #[serde(rename = "heightOffset")]
-    height_offset: Option<f32>
+    height_offset: Option<f32>,
+    #[serde(rename = "type")]
+    type_: String
 }
 
 #[derive(Debug, Deserialize)]
@@ -118,55 +125,96 @@ pub fn parse_xml(xml: &str ) -> OverlayData {
     data
 }
 
+// if icon_file exists in MarkerCategory, add to map
+fn add_to_hashmap(mut acc: HashMap<String, String>, item: &MarkerCategory, key_prefix: String) -> HashMap<String, String> {
+    let key = [key_prefix, item.name.to_string()].join(".");
+    let icon_file = item.icon_file.clone();
+    match icon_file {
+        Some(icon) => acc.insert(key, icon),
+        None => None,
+    };
+    return acc
+}
+
+fn get_texture(lookup: &HashMap<String, String>, poi: &POI) -> Option<String> {
+    let texture = match lookup.get(&poi.type_) {
+        Some(x) => Some(x.to_string()),
+        None if poi.icon_file.is_some() => poi.icon_file.clone(),
+        None => None
+    };
+    return texture
+}
+
 pub fn process_taco_data(input: OverlayData) -> HashMap<u32, Converted> {
     let root_marker_category = input.marker_category;
 
     let marker_category_array_container = root_marker_category.marker_category.unwrap();
 
     let marker_category_array = marker_category_array_container.marker_category_array;
+    let key_prefix = [root_marker_category.name, marker_category_array_container.name].join(".");
+
+    let add_to_hashmap_with_prefix = | acc: HashMap<_, _>, item: &MarkerCategory| {add_to_hashmap(acc, item, key_prefix.clone())};
+    let empty_map: HashMap<_, _> = HashMap::new();
+    let lookup = marker_category_array.iter().fold(empty_map, add_to_hashmap_with_prefix);
 
     let poi_array = input.pois.poi_array;
-
-    let folder_function = | mut acc: HashMap<u32, Converted>, item: &PoiItems | {
+    let folder_function = | mut acc: HashMap<u32, Converted>, item: &PoiItems | -> HashMap<u32, Converted> {
         match item {
             PoiItems::POI(poi)=> { 
                 let map_id = poi.map_id;
                 let array_ = acc.get(&map_id);
                 match array_ {
                     Some(x_) => {
-                        let mut res = x_.paths[0].points.clone();
-                        res.push([poi.xpos, poi.ypos, poi.zpos]);
-                        acc.insert(map_id, Converted{paths: [Path{points: res}]});
+                        let mut res = x_.icons.clone();
+                        // get texture. Make it a function?
+                        let texture = get_texture(&lookup, poi);
+                        res.push(Icon{position: [poi.xpos, poi.ypos, poi.zpos], texture});
+                        acc.insert(map_id, Converted{icons: res, paths: Vec::new()});
                     }
                     _ => {
                         let mut vec_ = Vec::new();
-                        vec_.push([poi.xpos, poi.ypos, poi.zpos]);
-                        acc.insert(map_id, Converted{paths: [Path{points: vec_}]});
+                        let texture = get_texture(&lookup, poi);
+                        vec_.push(Icon{position: [poi.xpos, poi.ypos, poi.zpos], texture});
+                        acc.insert(map_id, Converted{icons: vec_, paths: Vec::new()});
                     }
                 }
             }
             PoiItems::TrailMetadata(trail_metadata) => {
-                let z = &trail_metadata.trail_data;
+                // Read trail .trl file
+                let trail_file = &trail_metadata.trail_data;
+                let f = File::open(trail_file).unwrap();
+                let mut reader = BufReader::new(f);
+                let mut byte_array = Vec::new();
+                reader.read_to_end(&mut byte_array).unwrap();
+
+                // let parsed_trail = parse_trail();                
+                
             }
         }
         return acc;
     };
 
-    let map_name: HashMap<_, _> = HashMap::new();
-    let result = poi_array.iter().fold(map_name, folder_function);
+    let empty_map: HashMap<_, _> = HashMap::new();
+    let result = poi_array.iter().fold(empty_map, folder_function);
     return result
 }
 
 #[derive(Debug, Serialize)]
 pub struct Converted {
-    // icons: Vec<String>,
-    paths: [Path; 1]
+    icons: Vec<Icon>,
+    paths: Vec<Path>
 }
 
 #[derive(Debug, Serialize)]
 struct Path {
     // texture: String,
     points: Vec<[f32; 3]>
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct Icon {
+    position: [f32; 3],
+    texture: Option<String>
 }
 
 // Convert to map{ map_id: 
