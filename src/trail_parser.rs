@@ -5,25 +5,23 @@ use nom::{
     sequence::tuple};
 use nom::multi::fold_many0;
 
-
 #[derive(Debug,PartialEq)]
 pub struct Trail {
-    trail_version: i32,
-    map_id: i32,
-    coordinates: Vec<TrailCoordinates>
+    pub trail_version: i32,
+    pub map_id: i32,
+    pub coordinates: Vec<TrailCoordinates>
 }
-
 
 #[derive(Debug,PartialEq)]
 pub struct TrailCoordinates {
-    x: f32,
-    y: f32,
-    z: f32
+    pub xpos: f32,
+    pub ypos: f32,
+    pub zpos: f32
 }
 
 fn parse_coordinates(input: &[u8]) -> IResult<&[u8], TrailCoordinates> {
     let (input, (x, y, z)) = tuple((le_f32, le_f32, le_f32))(input)?;
-    Ok((input, TrailCoordinates{x, y, z}))
+    Ok((input, TrailCoordinates{xpos: x, ypos: y, zpos: z}))
 }
 
 pub fn parse_trail(input: &[u8]) -> IResult<&[u8], Trail> {
