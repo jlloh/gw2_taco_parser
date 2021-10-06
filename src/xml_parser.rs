@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_xml_rs;
 use std::collections::HashMap;
-use std::fs::read;
+use std::fs::{read, read_to_string};
 use std::path::Path as OsPath;
 
 use crate::trail_parser::{self, TrailCoordinates};
@@ -86,7 +86,7 @@ struct Path {
 #[derive(Debug, Serialize, Clone)]
 struct Icon {
     position: [f32; 3],
-    texture: Option<String>
+    texture: String
 }
 
 //https://docs.rs/serde-xml-rs/0.5.1/serde_xml_rs/
@@ -106,6 +106,10 @@ fn add_to_hashmap(mut acc: HashMap<String, String>, item: &MarkerCategory, key_p
     return acc
 }
 
+fn convert_windows_path(path: String) -> String {
+    path.replace("\\", "/")
+}
+
 fn get_texture(lookup: &HashMap<String, String>, poi: &POI) -> Option<String> {
     let texture = match lookup.get(&poi.type_) {
         Some(x) => Some(x.to_string()),
@@ -119,8 +123,12 @@ fn unwrap_trail_coordinates(input: &TrailCoordinates) -> [f32; 3] {
     return [input.xpos, input.ypos, input.zpos]
 }
 
-pub fn process_taco_data(folder: &OsPath, input: OverlayData) -> HashMap<u32, Converted> {
-    let root_marker_category = input.marker_category;
+pub fn process_taco_data(folder_name: String, xml_file: String) -> HashMap<u32, Converted> {
+    let folder = OsPath::new(&folder_name);
+    let contents = read_to_string(OsPath::new(folder).join(xml_file)).unwrap();
+    let xml_parsed = parse_xml(&contents);
+
+    let root_marker_category = xml_parsed.marker_category;
 
     let marker_category_array_container = root_marker_category.marker_category.unwrap();
 
@@ -131,7 +139,7 @@ pub fn process_taco_data(folder: &OsPath, input: OverlayData) -> HashMap<u32, Co
     let empty_map: HashMap<_, _> = HashMap::new();
     let lookup = marker_category_array.iter().fold(empty_map, add_to_hashmap_with_prefix);
 
-    let poi_array = input.pois.poi_array;
+    let poi_array = xml_parsed.pois.poi_array;
     let folder_function = | mut acc: HashMap<u32, Converted>, item: &PoiItems | -> HashMap<u32, Converted> {
         match item {
             PoiItems::POI(poi)=> { 
@@ -141,13 +149,13 @@ pub fn process_taco_data(folder: &OsPath, input: OverlayData) -> HashMap<u32, Co
                     Some(x_) => {
                         let mut res = x_.icons.clone();
                         // get texture. Make it a function?
-                        let texture = get_texture(&lookup, poi);
+                        let texture = convert_windows_path(get_texture(&lookup, poi).unwrap());
                         res.push(Icon{position: [poi.xpos, poi.ypos, poi.zpos], texture});
                         acc.insert(map_id, Converted{icons: res, paths: Vec::new()});
                     }
                     _ => {
                         let mut vec_ = Vec::new();
-                        let texture = get_texture(&lookup, poi);
+                        let texture = convert_windows_path(get_texture(&lookup, poi).unwrap());
                         vec_.push(Icon{position: [poi.xpos, poi.ypos, poi.zpos], texture});
                         acc.insert(map_id, Converted{icons: vec_, paths: Vec::new()});
                     }
@@ -164,7 +172,7 @@ pub fn process_taco_data(folder: &OsPath, input: OverlayData) -> HashMap<u32, Co
                 let points: Vec<[f32; 3]> = trail_coordinates.iter().map(|x| unwrap_trail_coordinates(x)).collect();
                 match current_retrieved {
                     Some(current_item) => {
-                        let trail_points = Path{points, texture: texture.to_string()};
+                        let trail_points = Path{points, texture: convert_windows_path(texture.to_string())};
                         let mut paths = (current_item.paths).clone();
                         paths.push(trail_points);
                         let icons = current_item.icons.clone();
