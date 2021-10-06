@@ -1,55 +1,10 @@
-// use nom::IResult;
-use nom::number::complete::{le_i32, le_f32};
-use nom::{
-    IResult,
-    sequence::tuple};
-use nom::multi::fold_many0;
 use serde::{Deserialize, Serialize};
 use serde_xml_rs;
 use std::collections::HashMap;
+use std::fs::read;
+use std::path::Path as OsPath;
 
-use std::io;
-use std::io::Read;
-use std::io::BufReader;
-use std::fs::File;
-
-#[derive(Debug,PartialEq)]
-pub struct Trail {
-    trail_version: i32,
-    map_id: i32,
-    coordinates: Vec<TrailCoordinates>
-}
-
-#[derive(Debug,PartialEq)]
-pub struct TrailCoordinates {
-    x: f32,
-    y: f32,
-    z: f32
-}
-
-fn parse_coordinates(input: &[u8]) -> IResult<&[u8], TrailCoordinates> {
-    let (input, (x, y, z)) = tuple((le_f32, le_f32, le_f32))(input)?;
-    Ok((input, TrailCoordinates{x, y, z}))
-}
-
-pub fn parse_trail(input: &[u8]) -> IResult<&[u8], Trail> {
-    // Example usage of nom
-    // let (input, (x, y, z)) = tuple((le_f32, le_f32, le_f32))(input)?;
-    // let (input, x) = parse_coordinates(input)?;
-
-    let folder_function = |mut acc: Vec<TrailCoordinates>, item: TrailCoordinates| {
-        acc.push(item);
-        acc
-    };
-    let (input, (trail_version, map_id)) = tuple((le_i32, le_i32))(input)?;
-    let mut parse_all_coordinates = fold_many0(parse_coordinates, Vec::new, folder_function);
-    let (input,vec ) = parse_all_coordinates(input)?;
-    Ok((input, Trail{
-        trail_version,
-        map_id,
-        coordinates: vec
-    }))
-}
+use crate::trail_parser::{self, TrailCoordinates};
 
 #[derive(Debug, Deserialize)]
 pub struct OverlayData {
@@ -115,12 +70,27 @@ enum PoiItems {
     TrailMetadata(TrailMetadata)
 }
 
+
+#[derive(Debug, Serialize)]
+pub struct Converted {
+    icons: Vec<Icon>,
+    paths: Vec<Path>
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct Path {
+    texture: String,
+    points: Vec<[f32; 3]>
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct Icon {
+    position: [f32; 3],
+    texture: Option<String>
+}
+
 //https://docs.rs/serde-xml-rs/0.5.1/serde_xml_rs/
-// TODO: Accept Trail by making it an enum like the example
 pub fn parse_xml(xml: &str ) -> OverlayData {
-    //let root: minidom::Element = xml.parse().unwrap();
-    //println!("{:#?}", root);
-    // println!("{:?}", xml);
     let data: OverlayData = serde_xml_rs::from_str(xml).unwrap();
     data
 }
@@ -145,7 +115,11 @@ fn get_texture(lookup: &HashMap<String, String>, poi: &POI) -> Option<String> {
     return texture
 }
 
-pub fn process_taco_data(input: OverlayData) -> HashMap<u32, Converted> {
+fn unwrap_trail_coordinates(input: &TrailCoordinates) -> [f32; 3] {
+    return [input.xpos, input.ypos, input.zpos]
+}
+
+pub fn process_taco_data(folder: &OsPath, input: OverlayData) -> HashMap<u32, Converted> {
     let root_marker_category = input.marker_category;
 
     let marker_category_array_container = root_marker_category.marker_category.unwrap();
@@ -182,13 +156,22 @@ pub fn process_taco_data(input: OverlayData) -> HashMap<u32, Converted> {
             PoiItems::TrailMetadata(trail_metadata) => {
                 // Read trail .trl file
                 let trail_file = &trail_metadata.trail_data;
-                let f = File::open(trail_file).unwrap();
-                let mut reader = BufReader::new(f);
-                let mut byte_array = Vec::new();
-                reader.read_to_end(&mut byte_array).unwrap();
-
-                // let parsed_trail = parse_trail();                
-                
+                let texture = &trail_metadata.texture;
+                let byte_vector: &[u8] = &read(folder.join(trail_file)).unwrap();
+                let parsed_trail = trail_parser::parse_trail(byte_vector).unwrap().1;
+                let current_retrieved = acc.get(&(parsed_trail.map_id as u32));
+                let trail_coordinates = parsed_trail.coordinates;
+                let points: Vec<[f32; 3]> = trail_coordinates.iter().map(|x| unwrap_trail_coordinates(x)).collect();
+                match current_retrieved {
+                    Some(current_item) => {
+                        let trail_points = Path{points, texture: texture.to_string()};
+                        let mut paths = (current_item.paths).clone();
+                        paths.push(trail_points);
+                        let icons = current_item.icons.clone();
+                        acc.insert(parsed_trail.map_id as u32, Converted{icons, paths});
+                    }
+                    None => (),
+                }
             }
         }
         return acc;
@@ -197,24 +180,6 @@ pub fn process_taco_data(input: OverlayData) -> HashMap<u32, Converted> {
     let empty_map: HashMap<_, _> = HashMap::new();
     let result = poi_array.iter().fold(empty_map, folder_function);
     return result
-}
-
-#[derive(Debug, Serialize)]
-pub struct Converted {
-    icons: Vec<Icon>,
-    paths: Vec<Path>
-}
-
-#[derive(Debug, Serialize)]
-struct Path {
-    // texture: String,
-    points: Vec<[f32; 3]>
-}
-
-#[derive(Debug, Serialize, Clone)]
-struct Icon {
-    position: [f32; 3],
-    texture: Option<String>
 }
 
 // Convert to map{ map_id: 
