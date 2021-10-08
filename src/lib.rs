@@ -1,2 +1,2 @@
 mod trail_parser;
-mod xml_parser;
+pub mod xml_parser;

@@ -1,6 +1,6 @@
 [package]
 name = "gw2_taco_parser"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2018"
 description = "A very simple util that parses the XML and corresponding C struct trail files (using nom) from Taco (GW2 overlay), to produce a json compatible format for [Burrito](https://github.com/AsherGlick/Burrito), a GW2 overlay for Linux."
 repository = "https://github.com/jlloh/gw2_taco_parser"
