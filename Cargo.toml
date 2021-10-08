@@ -1,5 +1,5 @@
 [package]
-name = "learn_rust"
+name = "gw2_taco_parser"
 version = "0.1.0"
 edition = "2018"
 
