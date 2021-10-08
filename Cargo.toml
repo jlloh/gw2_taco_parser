@@ -8,6 +8,9 @@ license-file = "LICENSE"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+name = "gw2_taco_parser"
+
 [dependencies]
 nom = "7.0.0"
 serde = { version = "1.0", features = ["derive"] }
